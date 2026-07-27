@@ -130,7 +130,7 @@ Want to see how many people visit and which amounts they pick? Make a free [Post
 
 1. **Turn it on.** In `chai.config.yaml`, uncomment the `analytics` block. Your key does *not* go in this file. The `host` line says EU — if you signed up on PostHog's US cloud, change it to `https://us.i.posthog.com`. Get this wrong and PostHog accepts every event and quietly bins it, with nothing to see anywhere.
 2. **Add your key.** Go to Settings → Secrets and variables → Actions → **Variables** and add `VITE_POSTHOG_KEY`. Use the key that starts with `phc_`; it can only send events, so it is safe to be public. Then push any commit, so the next build picks it up.
-3. **Make the dashboard.** Go to the Actions tab → **Set up PostHog dashboard** → **Run workflow**. Check the region is the one you signed up on (EU is preselected), and run it. It builds a ready-made dashboard — visitors, funnel, popular amounts, pay-method mix — and gives you the link when it finishes.
+3. **Make the dashboard.** Go to the Actions tab → **Set up PostHog dashboard** → **Run workflow**. Check the region is the one you signed up on (EU is preselected), and run it. It builds a ready-made dashboard, arranged and all — visitors, funnel, popular amounts, pay-method mix, and where your traffic comes from — and gives you the link when it finishes.
 
 > Step 3 also needs your **personal** key (it starts with `phx_`), saved once as a repo **Secret** called `POSTHOG_PERSONAL_API_KEY`. If it is missing, the workflow tells you where to add it. Click around your live page first, or the charts will be empty.
 
