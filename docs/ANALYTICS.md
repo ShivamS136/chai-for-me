@@ -17,8 +17,14 @@ Analytics is **off by default**. When enabled (PostHog adapter, see CONFIG.md), 
 `source` is present only when the visit arrived with a `?ref=`/`?source=` parameter — the
 sanitised hostname of the page that linked here, which is how the template's own branding
 links tag clone-driven traffic (ADR-027). It is the same class of data as `$referrer`, never
-a donor identifier. Standard `utm_*` parameters need no property of ours: posthog-js reads
-them off the URL. Break tile 1 down by `source` to see which deployments send you visitors.
+a donor identifier. Tile 14 breaks down on it.
+
+Standard `utm_*` parameters need no property of ours. `before_send` filters by event
+**name**, not by property, so posthog-js's own automatic properties ride along on all three
+events: `utm_source`, `utm_medium`, `utm_campaign`, `$referrer`, `$referring_domain`,
+`$device_type`. That is deliberate — it is what tiles 1 and 10–13 read, and none of it
+identifies a donor. It is also why the contract stays three events rather than growing a
+fourth for attribution.
 
 **Never** in any event: donor message content, the creator's VPA (it's in the page anyway, but keep events clean), or any donor identifier beyond PostHog's defaults. Contributions adding properties must update this table + `types.ts` together.
 
@@ -57,20 +63,36 @@ CI runs that same grep, and a source-scan test asserts nothing anywhere in `src/
 
 ## The "Chai Analytics" dashboard
 
-Eight tiles, designed around three creator questions: *is anyone visiting? are they interested? where does interest leak?*
+Fourteen tiles, designed around four creator questions: *is anyone visiting? are they
+interested? where does interest leak? where do they come from?* The table is in dashboard
+reading order — left to right, top to bottom — which is also the order they stack on mobile.
 
 | # | Tile | Type | Definition | Honest-metrics note |
 |---|---|---|---|---|
-| 1 | Visitors | Trend, unique users on `page_view`, daily | Reach | |
+| 1 | Device mix | Bar, `page_view` by `$device_type` | Mobile-heavy? Prioritize testing the deeplink/copy flow | |
 | 2 | Page views | Trend, total `page_view`, daily | Volume incl. repeats | |
-| 3 | Intent funnel | Funnel: `page_view` → `amount_selected` → `pay_clicked` (7-day window, per user) | The core conversion view | Last step = intent, not payment |
-| 4 | Pay clicks by method | Trend (bar), `pay_clicked` broken down by `method` | Tells you if deeplink or copy dominates → informs your CTA placement | High `copy_vpa` share on mobile ≈ deeplinks failing for your donors |
-| 5 | Amount interest (₹) | Trend, SUM of `amount` on `pay_clicked`, weekly | "Amount impressions" | **Not revenue.** Compare against your actual UPI statement |
+| 3 | Visitors | Trend, unique users on `page_view`, daily | Reach | |
+| 4 | Preset vs custom | Pie, `amount_selected` broken down by `preset` | If custom dominates, your presets are wrong | |
+| 5 | Pay clicks by method | Trend (bar), `pay_clicked` broken down by `method` | Tells you if deeplink or copy dominates → informs your CTA placement | High `copy_vpa` share on mobile ≈ deeplinks failing for your donors |
 | 6 | Popular amounts | Bar, `amount_selected` broken down by `amount` (top 10) | Tune your `chai.presets` tiers | |
-| 7 | Preset vs custom | Pie, `amount_selected` broken down by `preset` | If custom dominates, your presets are wrong | |
-| 8 | Device mix | Bar, `page_view` by `$device_type` | Mobile-heavy? Prioritize testing the deeplink/copy flow | |
+| 7 | Amount interest (₹) | Trend, SUM of `amount` on `pay_clicked`, weekly | "Amount impressions" | **Not revenue.** Compare against your actual UPI statement |
+| 8 | Intent funnel | Funnel: `page_view` → `amount_selected` → `pay_clicked` (7-day window, per user) | The core conversion view | Last step = intent, not payment |
+| 9 | Total amount interest (₹) | Big number, SUM of `amount` on `pay_clicked`, all time | The headline figure | **Not revenue** — and the easiest tile here to misread, which is why the disclaimer is in its title |
+| 10 | Amount interest (₹) by source | Bar, SUM of `amount` on `pay_clicked` by `utm_source` | Which channel brings intent worth having, not just clicks | **Not revenue** |
+| 11 | Traffic by source | Bar, unique `page_view` by `utm_source` | Which tagged link people arrive on | Blank = untagged or direct |
+| 12 | Top referrers | Bar, unique `page_view` by `$referring_domain` | Where they came from whether or not you tagged the link | `$direct` = typed, bookmarked, or an app that strips the referrer — most chat apps do |
+| 13 | Campaigns | Bar, unique `page_view` by `utm_campaign` | Tells one video / post / newsletter apart from the next | Empty until you tag a link |
+| 14 | Referrals from other chai pages | Bar, unique `page_view` by `source` | Which clone deployments link back to you (ADR-027) | Empty if nobody links to you with `?ref=` |
 
-Tile 3 + 4 together are the debugging view for ADR-006: a funnel that dies between `amount_selected` and `pay_clicked` on mobile usually means the pay zone isn't landing.
+Tiles 8 + 5 together are the debugging view for ADR-006: a funnel that dies between `amount_selected` and `pay_clicked` on mobile usually means the pay zone isn't landing.
+
+Tiles 11–13 stay empty until you tag the links you post — `?utm_source=twitter`,
+`?utm_campaign=setup-video`. Tile 12 needs nothing from you and is the one to read first.
+
+**The script owns the arrangement.** Tile positions and sizes ship in the script and are
+written on every run, so a re-run restores the layout above over anything you dragged. If a
+future PostHog rejects the layout call, the run still succeeds — you get every chart and a
+warning saying to arrange them yourself.
 
 ## Pick your region once
 
@@ -89,7 +111,8 @@ Get the app host wrong and you get a 401 immediately. Get the ingestion host wro
 | **B** — PostHog MCP | An AI coding agent (Claude Code, Cursor, …) | You already work in an agent and would rather ask for the dashboard in English — and tweak it conversationally afterwards |
 | **C** — manual | Nothing | You want to see how each insight is built, or you don't want any key/agent involved |
 
-All four produce the same eight tiles. A, B and D hit the same PostHog API.
+All four produce the same fourteen tiles. A, B and D hit the same PostHog API — and only
+those three place the tiles for you; Path C leaves you arranging them by hand.
 
 ### Path D: the GitHub Actions button (no terminal)
 
@@ -147,9 +170,11 @@ agent builds the exact contract rather than improvising:
 
 > Create a PostHog dashboard called "Chai Analytics" in project `<your project>`, from the
 > tile table in `docs/ANALYTICS.md` of this repo. Use only the events `page_view`,
-> `amount_selected` and `pay_clicked`. Do not invent events or properties. Tile 3 is a funnel
-> `page_view → amount_selected → pay_clicked` with a 7-day window; tile 5 sums the `amount`
-> property on `pay_clicked` and must be labelled as intent, not revenue.
+> `amount_selected` and `pay_clicked`. Do not invent events or properties. Tile 8 is a funnel
+> `page_view → amount_selected → pay_clicked` with a 7-day window; tiles 7, 9 and 10 sum the
+> `amount` property on `pay_clicked` and must be labelled as intent, not revenue. Tiles 10–13
+> break down on PostHog's own auto-captured `utm_*` / `$referring_domain` properties, which
+> exist on all three events — do not add properties to the events to make them work.
 
 The agent will use `dashboard-create` and `insight-create` (and `read-data-schema` to confirm
 your events actually exist) under the hood.
@@ -162,8 +187,9 @@ your events actually exist) under the hood.
   Check for an existing "Chai Analytics" first, or use Path A if you want a repeatable setup.
 - **Write access is real.** The MCP server can create and modify things in your PostHog
   project. Grant it the narrow scopes above rather than a full-access key.
-- **Read the result.** Confirm tile 5 is labelled as intent. An agent that quietly names it
-  "Revenue" has produced exactly the misreading this whole document exists to prevent.
+- **Read the result.** Confirm every ₹ tile (7, 9, 10) is labelled as intent. An agent that
+  quietly names one "Revenue" — the big number especially — has produced exactly the
+  misreading this whole document exists to prevent.
 
 ### Path C: manual (5 minutes, no API key)
 
